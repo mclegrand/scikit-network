@@ -4,14 +4,12 @@
 """The setup script."""
 
 
-from setuptools import find_packages, dist
+from setuptools import find_packages
 import distutils.util
 from distutils.core import setup, Extension
 from distutils.command.build_ext import build_ext
 import os
 from glob import glob
-
-dist.Distribution().fetch_build_eggs(['Cython', 'numpy==1.20.0'])
 
 import numpy
 
@@ -21,7 +19,7 @@ with open('README.rst') as readme_file:
 with open('HISTORY.rst') as history_file:
     history = history_file.read()
 
-requirements = ['numpy>=1.20.2', 'scipy>=1.6.2']
+requirements = ['numpy>=1.22.4', 'scipy>=1.7.3']
 
 setup_requirements = ['pytest-runner']
 
@@ -41,16 +39,19 @@ EXTRA_LINK_ARGS = ['-fopenmp']
 
 # Check whether we're on OSX >= 10.10
 name = distutils.util.get_platform()
-if name.startswith("macosx-10"):
-    EXTRA_COMPILE_ARGS = ['-lomp']
-    EXTRA_LINK_ARGS = ['-lomp']
-    minor_version = int(name.split("-")[1].split(".")[1])
-    if minor_version >= 7:
+if name.startswith("macosx"):
+    EXTRA_COMPILE_ARGS = []
+    EXTRA_LINK_ARGS = []
+    # EXTRA_COMPILE_ARGS = ['-lomp']
+    # EXTRA_LINK_ARGS = ['-lomp']
+    version = name.split("-")[1].split(".")
+    if int(version[0]) > 10 or (int(version[0]) == 10 and int(version[1]) >= 7):
         COMPILE_OPTIONS["other"].append("-stdlib=libc++")
         LINK_OPTIONS["other"].append("-lc++")
         # g++ (used by unix compiler on mac) links to libstdc++ as a default lib.
         # See: https://stackoverflow.com/questions/1653047/avoid-linking-to-libstdc
         LINK_OPTIONS["other"].append("-nodefaultlibs")
+
 # Windows does not (yet) support OpenMP
 if name.startswith("win"):
     EXTRA_COMPILE_ARGS = ['/d2FH4-']
@@ -71,6 +72,13 @@ class BuildExtSubclass(build_ext):
     def build_extensions(self):
         self.build_options()
         build_ext.build_extensions(self)
+
+    def finalize_options(self):
+        build_ext.finalize_options(self)
+        # Prevent numpy from thinking it is still in its setup process:
+        __builtins__.__NUMPY_SETUP__ = False
+        import numpy
+        self.include_dirs.append(numpy.get_include())
 
 
 # Cython generation/C++ compilation
@@ -120,16 +128,11 @@ setup(
         'License :: OSI Approved :: BSD License',
         'Natural Language :: English',
         'Programming Language :: Cython',
-        'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9'
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10'
     ],
     description="Graph algorithms",
-    entry_points={
-        'console_scripts': [
-            'sknetwork=sknetwork.cli:main',
-        ],
-    },
     install_requires=requirements,
     license="BSD license",
     long_description=readme + '\n\n' + history,
@@ -142,7 +145,7 @@ setup(
     test_suite='tests',
     tests_require=test_requirements,
     url='https://github.com/sknetwork-team/scikit-network',
-    version='0.23.1',
+    version='0.30.0',
     zip_safe=False,
     ext_modules=ext_modules,
     include_dirs=[numpy.get_include()],

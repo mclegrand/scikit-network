@@ -9,7 +9,7 @@ from typing import Union, Optional
 import numpy as np
 from scipy import sparse
 
-from sknetwork.path.shortest_path import distance
+from sknetwork.path.shortest_path import get_distances
 from sknetwork.ranking.base import BaseRanking
 from sknetwork.utils.check import check_format, check_square
 
@@ -20,9 +20,6 @@ class Harmonic(BaseRanking):
 
     For a directed graph, the harmonic centrality is computed in terms of outgoing paths.
 
-    * Graphs
-    * Digraphs
-
     Parameters
     ----------
     n_jobs:
@@ -32,7 +29,7 @@ class Harmonic(BaseRanking):
     Attributes
     ----------
     scores_ : np.ndarray
-        Harmonic centrality of each node.
+        Score of each node.
 
     Example
     -------
@@ -40,7 +37,7 @@ class Harmonic(BaseRanking):
     >>> from sknetwork.data import house
     >>> harmonic = Harmonic()
     >>> adjacency = house()
-    >>> scores = harmonic.fit_transform(adjacency)
+    >>> scores = harmonic.fit_predict(adjacency)
     >>> np.round(scores, 2)
     array([3. , 3.5, 3. , 3. , 3.5])
 
@@ -74,7 +71,7 @@ class Harmonic(BaseRanking):
         n = adjacency.shape[0]
         indices = np.arange(n)
 
-        dists = distance(adjacency, n_jobs=self.n_jobs, sources=indices)
+        dists = get_distances(adjacency, n_jobs=self.n_jobs, sources=indices)
 
         np.fill_diagonal(dists, 1)
         inv = (1 / dists)

@@ -1,83 +1,50 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mar, 2020
-@author: Nathan de Lara <ndelara@enst.fr>
+Created in July 2022
+@author: Thomas Bonald <thomas.bonald@telecom-paris.fr>
 """
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 from scipy import sparse
 
-from sknetwork.classification.base_rank import RankClassifier, RankBiClassifier
-from sknetwork.ranking.diffusion import Diffusion, Dirichlet
-from sknetwork.utils.check import check_labels
+from sknetwork.classification.base import BaseClassifier
+from sknetwork.linalg.normalization import normalize
+from sknetwork.utils.format import get_adjacency_values
+from sknetwork.utils.membership import get_membership
+from sknetwork.utils.neighbors import get_degrees
 
 
-def hot_and_cold_seeds(labels_seeds):
-    """Make one-vs-all seed labels from seeds.
+class DiffusionClassifier(BaseClassifier):
+    """Node classification by heat diffusion.
 
-    Parameters
-    ----------
-    labels_seeds :
-
-    Returns
-    -------
-    seeds_all: list
-        Personalization vectors.
-    """
-    seeds_all = []
-    classes, _ = check_labels(labels_seeds)
-
-    for label in classes:
-        seeds = -np.ones_like(labels_seeds)
-        seeds[labels_seeds == label] = 1
-        ix = np.logical_and(labels_seeds != label, labels_seeds >= 0)
-        seeds[ix] = 0
-        seeds_all.append(seeds)
-
-    return seeds_all
-
-
-def process_scores(scores: np.ndarray) -> np.ndarray:
-    """Post-processing of the score matrix.
-
-    Parameters
-    ----------
-    scores : np.ndarray
-        Matrix of scores, shape number of nodes x number of labels.
-
-    Returns
-    -------
-    scores: np.ndarray
-    """
-    scores -= np.mean(scores, axis=0)
-    scores = np.exp(scores)
-    return scores
-
-
-class DiffusionClassifier(RankClassifier):
-    """Node classification using multiple diffusions.
-
-    * Graphs
-    * Digraphs
+    For each label, the temperature of a node corresponds to its probability to have this label.
 
     Parameters
     ----------
     n_iter : int
-        Number of steps of the diffusion in discrete time (must be positive).
-    damping_factor : float (optional)
-        Damping factor (default value = 1).
-    n_jobs :
-        If positive, number of parallel jobs allowed (-1 means maximum number).
-        If ``None``, no parallel computations are made.
+        Number of iterations of the diffusion (discrete time).
+    centering : bool
+        If ``True``, center the temperature of each label to its mean before classification (default).
+    threshold : float
+        Minimum difference of temperatures between the 2 top labels to classify a node (default = 0).
+        If the difference of temperatures does not exceed this threshold, return -1 for this node (no label).
 
     Attributes
     ----------
-    labels_ : np.ndarray
-        Label of each node (hard classification).
-    membership_ : sparse.csr_matrix
-        Membership matrix (soft classification, labels on columns).
+    labels_ : np.ndarray, shape (n_labels,)
+        Label of each node.
+    membership_ : sparse.csr_matrix, shape (n_row, n_labels)
+        Membership matrix.
+    labels_row_ : np.ndarray
+        Labels of rows, for bipartite graphs.
+    labels_col_ : np.ndarray
+        Labels of columns, for bipartite graphs.
+    membership_row_ : sparse.csr_matrix, shape (n_row, n_labels)
+        Membership matrix of rows, for bipartite graphs.
+    membership_col_ : sparse.csr_matrix, shape (n_col, n_labels)
+        Membership matrix of columns, for bipartite graphs.
 
     Example
     -------
@@ -86,167 +53,81 @@ class DiffusionClassifier(RankClassifier):
     >>> graph = karate_club(metadata=True)
     >>> adjacency = graph.adjacency
     >>> labels_true = graph.labels
-    >>> seeds = {0: labels_true[0], 33: labels_true[33]}
-    >>> labels_pred = diffusion.fit_transform(adjacency, seeds)
-    >>> np.round(np.mean(labels_pred == labels_true), 2)
-    0.94
-
-    References
-    ----------
-    * de Lara, N., & Bonald, T. (2020).
-      `A Consistent Diffusion-Based Algorithm for Semi-Supervised Classification on Graphs.
-      <https://arxiv.org/pdf/2008.11944.pdf>`_
-      arXiv preprint arXiv:2008.11944.
-
-    * Zhu, X., Lafferty, J., & Rosenfeld, R. (2005). `Semi-supervised learning with graphs
-      <http://pages.cs.wisc.edu/~jerryzhu/machineteaching/pub/thesis.pdf>`_
-      (Doctoral dissertation, Carnegie Mellon University, language technologies institute, school of computer science).
-    """
-    def __init__(self, n_iter: int = 10, damping_factor: Optional[float] = None, n_jobs: Optional[int] = None):
-        algorithm = Diffusion(n_iter, damping_factor)
-        super(DiffusionClassifier, self).__init__(algorithm, n_jobs)
-        self._process_scores = process_scores
-
-
-class BiDiffusionClassifier(DiffusionClassifier, RankBiClassifier):
-    """Node classification using multiple diffusions.
-
-    * Bigraphs
-
-    Parameters
-    ----------
-    n_iter : int
-        Number of steps of the diffusion in discrete time (must be positive).
-    damping_factor : float (optional)
-        Damping factor (default value = 1).
-    n_jobs :
-        If positive, number of parallel jobs allowed (-1 means maximum number).
-        If ``None``, no parallel computations are made.
-
-    Attributes
-    ----------
-    labels_ : np.ndarray
-        Label of each row.
-    labels_row_ : np.ndarray
-        Label of each row (copy of **labels_**).
-    labels_col_ : np.ndarray
-        Label of each column.
-    membership_ : sparse.csr_matrix
-        Membership matrix of rows (soft classification, labels on columns).
-    membership_row_ : sparse.csr_matrix
-        Membership matrix of rows (copy of **membership_**).
-    membership_col_ : sparse.csr_matrix
-        Membership matrix of columns.
-
-    Example
-    -------
-    >>> from sknetwork.classification import BiDiffusionClassifier
-    >>> from sknetwork.data import star_wars
-    >>> bidiffusion = BiDiffusionClassifier(n_iter=2)
-    >>> biadjacency = star_wars()
-    >>> seeds = {0: 1, 2: 0}
-    >>> bidiffusion.fit_transform(biadjacency, seeds)
-    array([1, 1, 0, 0])
-    """
-    def __init__(self, n_iter: int = 10, damping_factor: Optional[float] = None, n_jobs: Optional[int] = None):
-        super(BiDiffusionClassifier, self).__init__(n_iter=n_iter, damping_factor=damping_factor, n_jobs=n_jobs)
-
-
-class DirichletClassifier(RankClassifier):
-    """Node classification using multiple Dirichlet problems.
-
-    * Graphs
-    * Digraphs
-
-    Parameters
-    ----------
-    n_iter : int
-        If positive, the solution to the Dirichlet problem is approximated by power iteration for n_iter steps.
-        Otherwise, the solution is computed through BiConjugate Stabilized Gradient descent.
-    damping_factor : float (optional)
-        Damping factor (default value = 1).
-    n_jobs :
-        If an integer value is given, denotes the number of workers to use (-1 means the maximum number will be used).
-        If ``None``, no parallel computations are made.
-    verbose :
-        Verbose mode.
-
-    Attributes
-    ----------
-    labels_ : np.ndarray
-        Label of each node (hard classification).
-    membership_ : sparse.csr_matrix
-        Membership matrix (soft classification, labels on columns).
-
-    Example
-    -------
-    >>> from sknetwork.data import karate_club
-    >>> dirichlet = DirichletClassifier()
-    >>> graph = karate_club(metadata=True)
-    >>> adjacency = graph.adjacency
-    >>> labels_true = graph.labels
-    >>> seeds = {0: labels_true[0], 33: labels_true[33]}
-    >>> labels_pred = dirichlet.fit_transform(adjacency, seeds)
+    >>> labels = {0: labels_true[0], 33: labels_true[33]}
+    >>> labels_pred = diffusion.fit_predict(adjacency, labels)
     >>> np.round(np.mean(labels_pred == labels_true), 2)
     0.97
 
     References
     ----------
-    Zhu, X., Lafferty, J., & Rosenfeld, R. (2005). `Semi-supervised learning with graphs
-    <http://pages.cs.wisc.edu/~jerryzhu/machineteaching/pub/thesis.pdf>`_
+    Zhu, X., Lafferty, J., & Rosenfeld, R. (2005). `Semi-supervised learning with graphs`
     (Doctoral dissertation, Carnegie Mellon University, language technologies institute, school of computer science).
     """
-    def __init__(self, n_iter: int = 10, damping_factor: Optional[float] = None, n_jobs: Optional[int] = None,
-                 verbose: bool = False):
-        algorithm = Dirichlet(n_iter, damping_factor, verbose)
-        super(DirichletClassifier, self).__init__(algorithm, n_jobs, verbose)
-        self._process_seeds = hot_and_cold_seeds
-        self._process_scores = process_scores
+    def __init__(self, n_iter: int = 10, centering: bool = True, threshold: float = 0):
+        super(DiffusionClassifier, self).__init__()
 
+        if n_iter <= 0:
+            raise ValueError('The number of iterations must be positive.')
+        else:
+            self.n_iter = n_iter
+        self.centering = centering
+        self.threshold = threshold
 
-class BiDirichletClassifier(DirichletClassifier, RankBiClassifier):
-    """Node classification using multiple diffusions.
+    def fit(self, input_matrix: Union[sparse.csr_matrix, np.ndarray],
+            labels: Optional[Union[dict, np.ndarray]] = None, labels_row: Optional[Union[dict, np.ndarray]] = None,
+            labels_col: Optional[Union[dict, np.ndarray]] = None, force_bipartite: bool = False) \
+            -> 'DiffusionClassifier':
+        """Compute the solution to the Dirichlet problem (temperatures at equilibrium).
 
-    * Bigraphs
+        Parameters
+        ----------
+        input_matrix :
+            Adjacency matrix or biadjacency matrix of the graph.
+        labels :
+            Known labels (dictionary or vector of int). Negative values ignored.
+        labels_row, labels_col :
+            Labels of rows and columns for bipartite graphs. Negative values ignored.
+        force_bipartite :
+            If ``True``, consider the input matrix as a biadjacency matrix (default = ``False``).
 
-    Parameters
-    ----------
-    n_iter : int
-        If positive, the solution to the Dirichlet problem is approximated by power iteration for n_iter steps.
-        Otherwise, the solution is computed through BiConjugate Stabilized Gradient descent.
-    damping_factor : float (optional)
-        Damping factor (default value = 1).
-    n_jobs :
-        If positive, number of parallel jobs allowed (-1 means maximum number).
-        If ``None``, no parallel computations are made.
-    verbose :
-        Verbose mode.
+        Returns
+        -------
+        self: :class:`DiffusionClassifier`
+        """
+        adjacency, values, self.bipartite = get_adjacency_values(input_matrix, force_bipartite=force_bipartite,
+                                                                 values=labels,
+                                                                 values_row=labels_row,
+                                                                 values_col=labels_col)
+        labels = values.astype(int)
+        if (labels < 0).all():
+            raise ValueError('At least one node must be given a non-negative label.')
+        temperatures = get_membership(labels).toarray()
+        temperatures_seeds = temperatures[labels >= 0]
+        n_labels = temperatures.shape[1]
+        temperatures[labels < 0] = 1 / n_labels
+        diffusion = normalize(adjacency)
+        for i in range(self.n_iter):
+            temperatures = diffusion.dot(temperatures)
+            temperatures[labels >= 0] = temperatures_seeds
 
-    Attributes
-    ----------
-    labels_ : np.ndarray
-        Label of each row.
-    labels_row_ : np.ndarray
-        Label of each row (copy of **labels_**).
-    labels_col_ : np.ndarray
-        Label of each column.
-    membership_ : sparse.csr_matrix
-        Membership matrix of rows (soft classification, labels on columns).
-    membership_row_ : sparse.csr_matrix
-        Membership matrix of rows (copy of **membership_**).
-    membership_col_ : sparse.csr_matrix
-        Membership matrix of columns.
+        self.membership_ = sparse.csr_matrix(temperatures)
 
-    Example
-    -------
-    >>> from sknetwork.data import star_wars
-    >>> bidirichlet = BiDirichletClassifier()
-    >>> biadjacency = star_wars()
-    >>> seeds = {0: 1, 2: 0}
-    >>> bidirichlet.fit_transform(biadjacency, seeds)
-    array([1, 1, 0, 0])
-    """
-    def __init__(self, n_iter: int = 10, damping_factor: Optional[float] = None, n_jobs: Optional[int] = None,
-                 verbose: bool = False):
-        super(BiDirichletClassifier, self).__init__(n_iter=n_iter, damping_factor=damping_factor, verbose=verbose,
-                                                    n_jobs=n_jobs)
+        if self.centering:
+            temperatures -= temperatures.mean(axis=0)
+
+        labels_ = temperatures.argmax(axis=1)
+        # set label -1 to nodes without temperature (no diffusion to them)
+        labels_[get_degrees(self.membership_) == 0] = -1
+
+        if self.threshold >= 0:
+            if n_labels > 2:
+                top_temperatures = np.partition(-temperatures, 2, axis=1)[:, :2]
+            else:
+                top_temperatures = temperatures
+            differences = np.abs(top_temperatures[:, 0] - top_temperatures[:, 1])
+            labels_[differences <= self.threshold] = -1
+
+        self.labels_ = labels_
+        self._split_vars(input_matrix.shape)
+
+        return self

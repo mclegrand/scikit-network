@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on April 2020
+Created in April 2020
 @authors:
-Thomas Bonald <bonald@enst.fr>
-Quentin Lutz <qlutz@enst.fr>
+Thomas Bonald <thomas.bonald@telecom-paris.fr>
+Quentin Lutz <qlutz@live.fr>
 """
 from typing import Optional, Iterable, Union, Tuple
 
 import numpy as np
 from scipy import sparse
 
-from sknetwork.clustering.louvain import BiLouvain
+from sknetwork.clustering.louvain import Louvain
+from sknetwork.utils.format import is_symmetric
 from sknetwork.embedding.spring import Spring
 from sknetwork.visualization.colors import STANDARD_COLORS, COOLWARM_RGB
 
@@ -32,7 +33,8 @@ def min_max_scaling(x: np.ndarray, x_min: Optional[float] = None, x_max: Optiona
 
 
 def rescale(position: np.ndarray, width: float, height: float, margin: float, node_size: float, node_size_max: float,
-            display_node_weight: bool):
+            display_node_weight: bool, names: Optional[np.ndarray] = None, name_position: str = 'right',
+            font_size: int = 12):
     """Rescale position and adjust parameters.
 
     Parameters
@@ -51,6 +53,12 @@ def rescale(position: np.ndarray, width: float, height: float, margin: float, no
         Maximum node size (used to adapt the margin)
     display_node_weight :
         If ``True``, display node weight (used to adapt the margin)
+    names :
+        Names of nodes.
+    name_position :
+        Position of names (left, right, above, below)
+    font_size :
+        Font size
 
     Returns
     -------
@@ -78,8 +86,32 @@ def rescale(position: np.ndarray, width: float, height: float, margin: float, no
         width = height
         if span_x and span_y:
             width *= span_x / span_y
-
     position = position * np.array([width, height])
+
+    # text
+    if names is not None:
+        lengths = np.array([len(str(name)) for name in names])
+        if name_position == 'left':
+            margin_left = -np.min(position[:, 0] - lengths * font_size)
+            margin_left = margin_left * (margin_left > 0)
+            position[:, 0] += margin_left
+            width += margin_left
+        elif name_position == 'right':
+            margin_right = np.max(position[:, 0] + lengths * font_size - width)
+            margin_right = margin_right * (margin_right > 0)
+            width += margin_right
+        else:
+            margin_left = -np.min(position[:, 0] - lengths * font_size / 2)
+            margin_left = margin_left * (margin_left > 0)
+            margin_right = np.max(position[:, 0] + lengths * font_size / 2 - width)
+            margin_right = margin_right * (margin_right > 0)
+            position[:, 0] += margin_left
+            width += margin_left + margin_right
+            if name_position == 'above':
+                position[:, 1] += font_size
+                height += font_size
+            else:
+                height += font_size
 
     # margins
     margin = max(margin, node_size_max * display_node_weight, node_size)
@@ -298,38 +330,47 @@ def svg_edge_directed(pos_1: np.ndarray, pos_2: np.ndarray, edge_width: float = 
         x, y = ((vec / norm) * node_size).astype(int)
         x1, y1 = pos_1.astype(int)
         x2, y2 = pos_2.astype(int)
-        return """<path stroke-width="{}" stroke="{}" d="M {} {} {} {}" marker-end="url(#arrow)"/>\n"""\
-            .format(edge_width, edge_color, x1, y1, x2 - x, y2 - y)
+        return """<path stroke-width="{}" stroke="{}" d="M {} {} {} {}" marker-end="url(#arrow-{})"/>\n"""\
+            .format(edge_width, edge_color, x1, y1, x2 - x, y2 - y, edge_color)
     else:
         return ""
 
 
-def svg_text(pos, text, font_size=12, align_right=False):
+def svg_text(pos, text, margin_text, font_size=12, position: str = 'right'):
     """Return svg code for text."""
-    x, y = pos.astype(int)
-    text = str(text).replace('&', ' ')
-    if align_right:
-        return """<text text-anchor="end" x="{}" y="{}" font-size="{}">{}</text>"""\
-            .format(x, y, font_size, text)
+    if position == 'left':
+        pos[0] -= margin_text
+        anchor = 'end'
+    elif position == 'above':
+        pos[1] -= margin_text
+        anchor = 'middle'
+    elif position == 'below':
+        pos[1] += 2 * margin_text
+        anchor = 'middle'
     else:
-        return """<text x="{}" y="{}" font-size="{}">{}</text>"""\
-            .format(x, y, font_size, text)
+        pos[0] += margin_text
+        anchor = 'start'
+    x, y = pos.astype(int)
+    text = str(text)
+    for c in ['&', '<', '>']:
+        text = text.replace(c, ' ')
+    return """<text text-anchor="{}" x="{}" y="{}" font-size="{}">{}</text>""".format(anchor, x, y, font_size, text)
 
 
 def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[np.ndarray] = None,
-              names: Optional[np.ndarray] = None,
-              labels: Optional[Iterable] = None, scores: Optional[Iterable] = None,
+              names: Optional[np.ndarray] = None, labels: Optional[Iterable] = None,
+              name_position: str = 'right', scores: Optional[Iterable] = None,
               membership: Optional[sparse.csr_matrix] = None,
               seeds: Union[list, dict] = None, width: Optional[float] = 400, height: Optional[float] = 300,
               margin: float = 20, margin_text: float = 3, scale: float = 1, node_order: Optional[np.ndarray] = None,
               node_size: float = 7, node_size_min: float = 1, node_size_max: float = 20,
-              display_node_weight: bool = False, node_weights: Optional[np.ndarray] = None, node_width: float = 1,
-              node_width_max: float = 3, node_color: str = 'gray',
+              display_node_weight: Optional[bool] = None, node_weights: Optional[np.ndarray] = None,
+              node_width: float = 1, node_width_max: float = 3, node_color: str = 'gray',
               display_edges: bool = True, edge_labels: Optional[list] = None,
               edge_width: float = 1, edge_width_min: float = 0.5,
               edge_width_max: float = 20, display_edge_weight: bool = True,
               edge_color: Optional[str] = None, label_colors: Optional[Iterable] = None,
-              font_size: int = 12, directed: bool = False, filename: Optional[str] = None) -> str:
+              font_size: int = 12, directed: Optional[bool] = None, filename: Optional[str] = None) -> str:
     """Return SVG image of a graph.
 
     Parameters
@@ -342,6 +383,8 @@ def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[
         Names of the nodes.
     labels :
         Labels of the nodes (negative values mean no label).
+    name_position :
+        Position of the names (left, right, above, below)
     scores :
         Scores of the nodes (measure of importance).
     membership :
@@ -375,7 +418,7 @@ def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[
     display_node_weight :
         If ``True``, display node weights through node size.
     node_weights :
-        Node weights (used only if **display_node_weight** is ``True``).
+        Node weights.
     display_edges :
         If ``True``, display edges.
     edge_labels :
@@ -424,6 +467,9 @@ def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[
             adjacency = sparse.csr_matrix((n, n)).astype(int)
     else:
         n = adjacency.shape[0]
+    adjacency.eliminate_zeros()
+    if directed is None:
+        directed = not is_symmetric(adjacency)
 
     # node order
     if node_order is None:
@@ -438,6 +484,8 @@ def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[
     node_colors = get_node_colors(n, labels, scores, membership, node_color, label_colors)
 
     # node sizes
+    if display_node_weight is None:
+        display_node_weight = node_weights is not None
     if node_weights is None:
         node_weights = adjacency.T.dot(np.ones(n))
     node_sizes = get_node_sizes(node_weights, node_size, node_size_min, node_size_max, display_node_weight)
@@ -446,11 +494,8 @@ def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[
     node_widths = get_node_widths(n, seeds, node_width, node_width_max)
 
     # rescaling
-    position, width, height = rescale(position, width, height, margin, node_size, node_size_max, display_node_weight)
-
-    if names is not None:
-        text_length = np.max(np.array([len(str(name)) for name in names]))
-        width += text_length * font_size * .5
+    position, width, height = rescale(position, width, height, margin, node_size, node_size_max, display_node_weight,
+                                      names, name_position, font_size)
 
     # scaling
     position *= scale
@@ -469,13 +514,15 @@ def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[
             else:
                 edge_color = 'gray'
 
-        if directed:
-            svg += """<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" >\n"""
-            svg += """<path d="M0,0 L0,6 L9,3 z" fill="{}"/></marker></defs>\n""".format(edge_color)
-
         edge_colors, edge_order, edge_colors_residual = get_edge_colors(adjacency, edge_labels, edge_color,
                                                                         label_colors)
         edge_widths = get_edge_widths(adjacency_coo, edge_width, edge_width_min, edge_width_max, display_edge_weight)
+
+        if directed:
+            for edge_color in set(edge_colors):
+                svg += """<defs><marker id="arrow-{}" markerWidth="10" markerHeight="10" refX="9" refY="3"
+                orient="auto" >\n""".format(edge_color)
+                svg += """<path d="M0,0 L0,6 L9,3 z" fill="{}"/></marker></defs>\n""".format(edge_color)
 
         for ix in edge_order:
             i = adjacency_coo.row[ix]
@@ -511,7 +558,7 @@ def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[
     # text
     if names is not None:
         for i in range(n):
-            svg += svg_text(position[i] + node_sizes[i] + (margin_text, 0), names[i], font_size)
+            svg += svg_text(position[i], names[i], node_sizes[i] + margin_text, font_size, name_position)
     svg += """</svg>\n"""
 
     if filename is not None:
@@ -519,114 +566,6 @@ def svg_graph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[
             f.write(svg)
 
     return svg
-
-
-def svg_digraph(adjacency: Optional[sparse.csr_matrix] = None, position: Optional[np.ndarray] = None,
-                names: Optional[np.ndarray] = None,
-                labels: Optional[Iterable] = None, scores: Optional[Iterable] = None,
-                membership: Optional[sparse.csr_matrix] = None,
-                seeds: Union[list, dict] = None, width: Optional[float] = 400, height: Optional[float] = 300,
-                margin: float = 20, margin_text: float = 10, scale: float = 1, node_order: Optional[np.ndarray] = None,
-                node_size: float = 7, node_size_min: float = 1, node_size_max: float = 20,
-                display_node_weight: bool = False, node_weights: Optional[np.ndarray] = None, node_width: float = 1,
-                node_width_max: float = 3, node_color: str = 'gray',
-                display_edges: bool = True, edge_labels: Optional[list] = None,
-                edge_width: float = 1, edge_width_min: float = 0.5,
-                edge_width_max: float = 5, display_edge_weight: bool = True,
-                edge_color: Optional[str] = None, label_colors: Optional[Iterable] = None,
-                font_size: int = 12, filename: Optional[str] = None) -> str:
-    """Return SVG image of a digraph.
-
-    Parameters
-    ----------
-    adjacency :
-        Adjacency matrix of the graph.
-    position :
-        Positions of the nodes.
-    names :
-        Names of the nodes.
-    labels :
-        Labels of the nodes (negative values mean no label).
-    scores :
-        Scores of the nodes (measure of importance).
-    membership :
-        Membership of the nodes (label distribution).
-    seeds :
-        Nodes to be highlighted (if dict, only keys are considered).
-    width :
-        Width of the image.
-    height :
-        Height of the image.
-    margin :
-        Margin of the image.
-    margin_text :
-        Margin between node and text.
-    scale :
-        Multiplicative factor on the dimensions of the image.
-    node_order :
-        Order in which nodes are displayed.
-    node_size :
-        Size of nodes.
-    node_size_min :
-        Minimum size of a node.
-    node_size_max :
-        Maximum size of a node.
-    display_node_weight :
-        If ``True``, display node in-weights through node size.
-    node_weights :
-        Node weights (used only if **display_node_weight** is ``True``).
-    node_width :
-        Width of node circle.
-    node_width_max :
-        Maximum width of node circle.
-    node_color :
-        Default color of nodes (svg color).
-    display_edges :
-        If ``True``, display edges.
-    edge_labels :
-        Labels of the edges, as a list of tuples (source, destination, label)
-    edge_width :
-        Width of edges.
-    edge_width_min :
-        Minimum width of edges.
-    edge_width_max :
-        Maximum width of edges.
-    display_edge_weight :
-        If ``True``, display edge weights through edge widths.
-    edge_color :
-        Default color of edges (svg color).
-    label_colors :
-        Colors of the labels (svg color).
-    font_size :
-        Font size.
-    filename :
-        Filename for saving image (optional).
-
-    Returns
-    -------
-    image : str
-        SVG image.
-
-    Example
-    -------
-    >>> from sknetwork.data import painters
-    >>> graph = painters(True)
-    >>> adjacency = graph.adjacency
-    >>> position = graph.position
-    >>> from sknetwork.visualization import svg_digraph
-    >>> image = svg_graph(adjacency, position)
-    >>> image[1:4]
-    'svg'
-    """
-    return svg_graph(adjacency=adjacency, position=position, names=names, labels=labels, scores=scores,
-                     membership=membership, seeds=seeds, width=width, height=height, margin=margin,
-                     margin_text=margin_text, scale=scale, node_order=node_order, node_size=node_size,
-                     node_size_min=node_size_min, node_size_max=node_size_max, display_node_weight=display_node_weight,
-                     node_weights=node_weights, node_width=node_width, node_width_max=node_width_max,
-                     node_color=node_color, display_edges=display_edges, edge_labels=edge_labels,
-                     edge_width=edge_width, edge_width_min=edge_width_min, edge_width_max=edge_width_max,
-                     display_edge_weight=display_edge_weight, edge_color=edge_color, label_colors=label_colors,
-                     font_size=font_size, directed=True, filename=filename)
 
 
 def svg_bigraph(biadjacency: sparse.csr_matrix,
@@ -754,10 +693,10 @@ def svg_bigraph(biadjacency: sparse.csr_matrix,
         position_row = np.zeros((n_row, 2))
         position_col = np.ones((n_col, 2))
         if reorder:
-            bilouvain = BiLouvain()
-            bilouvain.fit(biadjacency)
-            index_row = np.argsort(bilouvain.labels_row_)
-            index_col = np.argsort(bilouvain.labels_col_)
+            louvain = Louvain()
+            louvain.fit(biadjacency, force_bipartite=True)
+            index_row = np.argsort(louvain.labels_row_)
+            index_col = np.argsort(louvain.labels_col_)
         else:
             index_row = np.arange(n_row)
             index_col = np.arange(n_col)
@@ -867,10 +806,10 @@ def svg_bigraph(biadjacency: sparse.csr_matrix,
     # text
     if names_row is not None:
         for i in range(n_row):
-            svg += svg_text(position_row[i] - (margin_text + node_sizes_row[i], 0), names_row[i], font_size, True)
+            svg += svg_text(position_row[i], names_row[i], margin_text + node_sizes_row[i], font_size, 'left')
     if names_col is not None:
         for i in range(n_col):
-            svg += svg_text(position_col[i] + (margin_text + node_sizes_col[i], 0), names_col[i], font_size)
+            svg += svg_text(position_col[i], names_col[i], margin_text + node_sizes_col[i], font_size)
     svg += """</svg>\n"""
 
     if filename is not None:

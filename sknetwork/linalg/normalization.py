@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Nov 2019
-@author: Nathan de Lara <ndelara@enst.fr>
+Created in November 2019
+@author: Nathan de Lara <nathan.delara@polytechnique.org>
 """
 from typing import Union
 
@@ -11,9 +11,9 @@ from scipy import sparse
 from scipy.sparse.linalg import LinearOperator
 
 
-def diag_pinv(weights: np.ndarray) -> sparse.csr_matrix:
-    """Compute :math:`W^+ = \\text{diag}(w)^+`, the pseudo inverse of the diagonal matrix
-    with diagonal the weights :math:`w`.
+def diagonal_pseudo_inverse(weights: np.ndarray) -> sparse.csr_matrix:
+    """Compute :math:`\\text{diag}(w)^+`, the pseudo-inverse of the diagonal matrix
+    with diagonal elements given by the weights :math:`w`.
 
     Parameters
     ----------
@@ -23,7 +23,6 @@ def diag_pinv(weights: np.ndarray) -> sparse.csr_matrix:
     Returns
     -------
     sparse.csr_matrix
-        :math:`W^+`
 
     """
     diag: sparse.csr_matrix = sparse.diags(weights, format='csr')
@@ -31,36 +30,54 @@ def diag_pinv(weights: np.ndarray) -> sparse.csr_matrix:
     return diag
 
 
+def get_norms(matrix: Union[sparse.csr_matrix, np.ndarray, LinearOperator], p=1):
+    """Get the norms of rows of a matrix.
+
+    Parameters
+    ----------
+    matrix : numpy array, sparse CSR matrix or linear operator, shape (n_rows, n_cols)
+        Input matrix.
+    p :
+        Order of the norm.
+    Returns
+    -------
+    norms : np.array, shape (n_rows,)
+        Vector norms
+    """
+    if p == 1:
+        norms = matrix.dot(np.ones(matrix.shape[1]))
+    elif p == 2:
+        if isinstance(matrix, np.ndarray):
+            norms = np.linalg.norm(matrix, axis=1)
+        elif isinstance(matrix, sparse.csr_matrix):
+            data = matrix.data.copy()
+            matrix.data = data ** 2
+            norms = np.sqrt(matrix.dot(np.ones(matrix.shape[1])))
+            matrix.data = data
+        else:
+            raise NotImplementedError('Norm 2 is not available for a LinearOperator.')
+    else:
+        raise NotImplementedError('Only norms 1 and 2 are available at the moment.')
+    return norms
+
+
 def normalize(matrix: Union[sparse.csr_matrix, np.ndarray, LinearOperator], p=1):
-    """Normalize rows of a matrix. Null rows remain null.
+    """Normalize the rows of a matrix so that all have norm 1 (or 0; null rows remain null).
 
     Parameters
     ----------
     matrix :
         Input matrix.
     p :
-        Order of the norm
+        Order of the norm.
 
     Returns
     -------
-    normalized matrix : same as input
+    normalized matrix :
+        Normalized matrix.
     """
-    if p == 1:
-        norm = matrix.dot(np.ones(matrix.shape[1]))
-    elif p == 2:
-        if isinstance(matrix, np.ndarray):
-            norm = np.linalg.norm(matrix, axis=1)
-        elif isinstance(matrix, sparse.csr_matrix):
-            data = matrix.data.copy()
-            matrix.data = data ** 2
-            norm = np.sqrt(matrix.dot(np.ones(matrix.shape[1])))
-            matrix.data = data
-        else:
-            raise NotImplementedError('Norm 2 is not available for LinearOperator.')
-    else:
-        raise NotImplementedError('Only norms 1 and 2 are available at the moment.')
-
-    diag = diag_pinv(norm)
+    norms = get_norms(matrix, p)
+    diag = diagonal_pseudo_inverse(norms)
     if hasattr(matrix, 'left_sparse_dot') and callable(matrix.left_sparse_dot):
         return matrix.left_sparse_dot(diag)
     return diag.dot(matrix)

@@ -4,7 +4,7 @@
 Created on Jul 1, 2019
 @author: Thomas Bonald <bonald@enst.fr>
 @author: Quentin Lutz <qlutz@enst.fr>
-@author: Nathan de Lara <ndelara@enst.fr>
+@author: Nathan de Lara <nathan.delara@polytechnique.org>
 """
 from math import pi
 from typing import Union, Optional, Iterable
@@ -12,13 +12,14 @@ from typing import Union, Optional, Iterable
 import numpy as np
 from scipy import sparse
 
+from sknetwork.data.parse import from_edge_list
 from sknetwork.utils import Bunch
+from sknetwork.utils.check import check_random_state
 from sknetwork.utils.format import directed2undirected
-from sknetwork.utils.parse import edgelist2adjacency
 
 
 def block_model(sizes: Iterable, p_in: Union[float, list, np.ndarray] = .2, p_out: float = .05,
-                random_state: Optional[int] = None, metadata: bool = False) \
+                directed: bool = False, self_loops: bool = False, metadata: bool = False, seed: Optional[int] = None) \
                 -> Union[sparse.csr_matrix, Bunch]:
     """Stochastic block model.
 
@@ -30,11 +31,14 @@ def block_model(sizes: Iterable, p_in: Union[float, list, np.ndarray] = .2, p_ou
         Probability of connection within blocks.
     p_out :
         Probability of connection across blocks.
-    random_state :
-        Seed of the random generator (optional).
+    directed :
+        If ``True``, return a directed graph.
+    self_loops :
+         If ``True``, allow self-loops.
     metadata :
-        If ``True``, return a `Bunch` object with metadata.
-
+        If ``True``, return a `Bunch` object with labels.
+    seed :
+        Seed of the random generator (optional).
     Returns
     -------
     adjacency or graph : Union[sparse.csr_matrix, Bunch]
@@ -54,32 +58,30 @@ def block_model(sizes: Iterable, p_in: Union[float, list, np.ndarray] = .2, p_ou
     `Mixed membership stochastic blockmodels. <https://arxiv.org/pdf/0705.4485.pdf>`_
     Journal of Machine Learning Research.
     """
-    np.random.seed(random_state)
-    sizes = np.array(sizes)
+    random_state = check_random_state(seed)
 
-    if isinstance(p_in, (np.floating, float)):
+    if isinstance(p_in, (np.floating, float, int)):
         p_in = p_in * np.ones_like(sizes)
     else:
         p_in = np.array(p_in)
 
-    # each edge is considered twice
-    p_in = p_in / 2
-
-    matrix = []
+    blocks = []
     for i, a in enumerate(sizes):
         row = []
         for j, b in enumerate(sizes):
-            if j < i:
-                row.append(None)
-            elif j > i:
-                row.append(sparse.random(a, b, p_out, dtype=bool))
+            if j == i:
+                row.append(sparse.random(a, a, p_in[i], dtype=bool, random_state=random_state))
             else:
-                row.append(sparse.random(a, a, p_in[i], dtype=bool))
-        matrix.append(row)
-    adjacency = sparse.bmat(matrix)
-    adjacency.setdiag(0)
-    adjacency = directed2undirected(adjacency.tocsr(), weighted=False)
-
+                row.append(sparse.random(a, b, p_out, dtype=bool, random_state=random_state))
+        blocks.append(row)
+    adjacency = sparse.bmat(blocks)
+    if not self_loops:
+        adjacency = sparse.lil_matrix(adjacency)
+        adjacency.setdiag(0)
+    if directed:
+        adjacency = sparse.csr_matrix(adjacency)
+    else:
+        adjacency = directed2undirected(sparse.csr_matrix(sparse.triu(adjacency)), weighted=False)
     if metadata:
         graph = Bunch()
         graph.adjacency = adjacency
@@ -90,7 +92,8 @@ def block_model(sizes: Iterable, p_in: Union[float, list, np.ndarray] = .2, p_ou
         return adjacency
 
 
-def erdos_renyi(n: int = 20, p: float = .3, random_state: Optional[int] = None) -> sparse.csr_matrix:
+def erdos_renyi(n: int = 20, p: float = .3, directed: bool = False, self_loops: bool = False,
+                seed: Optional[int] = None) -> sparse.csr_matrix:
     """Erdos-Renyi graph.
 
     Parameters
@@ -99,7 +102,11 @@ def erdos_renyi(n: int = 20, p: float = .3, random_state: Optional[int] = None) 
          Number of nodes.
     p :
         Probability of connection between nodes.
-    random_state :
+    directed :
+        If ``True``, return a directed graph.
+    self_loops :
+         If ``True``, allow self-loops.
+    seed :
         Seed of the random generator (optional).
 
     Returns
@@ -119,7 +126,7 @@ def erdos_renyi(n: int = 20, p: float = .3, random_state: Optional[int] = None) 
     Erdős, P., Rényi, A. (1959). `On Random Graphs. <https://www.renyi.hu/~p_erdos/1959-11.pdf>`_
     Publicationes Mathematicae.
     """
-    return block_model(np.array([n]), p, 0., random_state, metadata=False)
+    return block_model([n], p, 0., directed=directed, self_loops=self_loops, metadata=False, seed=seed)
 
 
 def linear_digraph(n: int = 3, metadata: bool = False) -> Union[sparse.csr_matrix, Bunch]:
@@ -303,7 +310,7 @@ def grid(n1: int = 10, n2: int = 10, metadata: bool = False) -> Union[sparse.csr
     edges += [((i1, i2), (i1, i2 + 1)) for i1 in range(n1) for i2 in range(n2 - 1)]
     node_id = {u: i for i, u in enumerate(nodes)}
     edges = list(map(lambda edge: (node_id[edge[0]], node_id[edge[1]]), edges))
-    adjacency = edgelist2adjacency(edges, undirected=True)
+    adjacency = from_edge_list(edges, reindex=False, matrix_only=True)
     if metadata:
         graph = Bunch()
         graph.adjacency = adjacency
@@ -313,7 +320,43 @@ def grid(n1: int = 10, n2: int = 10, metadata: bool = False) -> Union[sparse.csr
         return adjacency
 
 
-def albert_barabasi(n: int = 100, degree: int = 3, undirected: bool = True, seed: Optional[int] = None) \
+def star(n_branches: int = 3, metadata: bool = False) -> Union[sparse.csr_matrix, Bunch]:
+    """Star (undirected).
+
+    Parameters
+    ----------
+    n_branches : int
+        Number of branches.
+    metadata : bool
+        If ``True``, return a `Bunch` object with metadata (positions).
+
+    Returns
+    -------
+    adjacency or graph : Union[sparse.csr_matrix, Bunch]
+        Adjacency matrix or graph with metadata (positions).
+
+    Example
+    -------
+    >>> from sknetwork.data import star
+    >>> adjacency = star()
+    >>> adjacency.shape
+    (4, 4)
+    """
+    edges = [(0, i+1) for i in range(n_branches)]
+    adjacency = from_edge_list(edges, reindex=False, matrix_only=True)
+    if metadata:
+        graph = Bunch()
+        graph.adjacency = adjacency
+        angles = 2 * np.pi * np.arange(n_branches) / n_branches
+        x = [0] + list(np.cos(angles))
+        y = [0] + list(np.sin(angles))
+        graph.position = np.vstack([x, y]).T
+        return graph
+    else:
+        return adjacency
+
+
+def albert_barabasi(n: int = 100, degree: int = 3, directed: bool = False, seed: Optional[int] = None) \
         -> sparse.csr_matrix:
     """Albert-Barabasi model.
 
@@ -323,8 +366,8 @@ def albert_barabasi(n: int = 100, degree: int = 3, undirected: bool = True, seed
         Number of nodes.
     degree : int
         Degree of incoming nodes (less than **n**).
-    undirected : bool
-        If ``True``, return an undirected graph.
+    directed : bool
+        If ``True``, return a directed graph.
     seed :
         Seed of the random generator (optional).
 
@@ -346,16 +389,16 @@ def albert_barabasi(n: int = 100, degree: int = 3, undirected: bool = True, seed
     <https://journals.aps.org/rmp/abstract/10.1103/RevModPhys.74.47>`_
     Reviews of Modern Physics.
     """
-    np.random.seed(seed)
+    random_state = check_random_state(seed)
     degrees = np.zeros(n, int)
     degrees[:degree] = degree - 1
     edges = [(i, j) for i in range(degree) for j in range(i)]
     for i in range(degree, n):
-        neighbors = np.random.choice(i, p=degrees[:i]/degrees.sum(), size=degree, replace=False)
+        neighbors = random_state.choice(a=i, p=degrees[:i]/degrees.sum(), size=degree, replace=False)
         degrees[neighbors] += 1
         degrees[i] = degree
         edges += [(i, j) for j in neighbors]
-    return edgelist2adjacency(edges, undirected)
+    return from_edge_list(edges, directed=directed, reindex=False, matrix_only=True)
 
 
 def watts_strogatz(n: int = 100, degree: int = 6, prob: float = 0.05, seed: Optional[int] = None,
@@ -390,7 +433,7 @@ def watts_strogatz(n: int = 100, degree: int = 6, prob: float = 0.05, seed: Opti
     ----------
     Watts, D., Strogatz, S. (1998). Collective dynamics of small-world networks, Nature.
     """
-    np.random.seed(seed)
+    random_state = check_random_state(seed)
     edges = np.array([(i, (i + j + 1) % n) for i in range(n) for j in range(degree // 2)])
     row, col = edges[:, 0], edges[:, 1]
     adjacency = sparse.coo_matrix((np.ones_like(row, int), (row, col)), shape=(n, n))
@@ -400,8 +443,8 @@ def watts_strogatz(n: int = 100, degree: int = 6, prob: float = 0.05, seed: Opti
         neighbors = adjacency.rows[i]
         candidates = list(set(nodes) - set(neighbors) - {i})
         for j in neighbors:
-            if np.random.random() < prob:
-                node = np.random.choice(candidates)
+            if random_state.random() < prob:
+                node = random_state.choice(candidates)
                 adjacency[i, node] = 1
                 adjacency[node, i] = 1
                 adjacency[i, j] = 0

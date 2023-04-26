@@ -10,7 +10,7 @@ from typing import Union, Optional
 import numpy as np
 from scipy import sparse
 
-from sknetwork.path.shortest_path import distance
+from sknetwork.path.shortest_path import get_distances
 from sknetwork.ranking.base import BaseRanking
 from sknetwork.utils.check import check_format, check_square, check_connected
 
@@ -20,9 +20,6 @@ class Closeness(BaseRanking):
     shortest paths from that node to all the other ones.
 
     For a directed graph, the closeness centrality is computed in terms of outgoing paths.
-
-    * Graphs
-    * Digraphs
 
     Parameters
     ----------
@@ -45,7 +42,7 @@ class Closeness(BaseRanking):
     >>> from sknetwork.data import cyclic_digraph
     >>> closeness = Closeness()
     >>> adjacency = cyclic_digraph(3)
-    >>> scores = closeness.fit_transform(adjacency)
+    >>> scores = closeness.fit_predict(adjacency)
     >>> np.round(scores, 2)
     array([0.67, 0.67, 0.67])
 
@@ -91,7 +88,7 @@ class Closeness(BaseRanking):
         else:
             raise ValueError("Method should be either 'exact' or 'approximate'.")
 
-        dists = distance(adjacency, n_jobs=self.n_jobs, sources=sources)
+        dists = get_distances(adjacency, n_jobs=self.n_jobs, sources=sources)
 
         self.scores_ = ((n - 1) * n_sources / n) / dists.T.dot(np.ones(n_sources))
 

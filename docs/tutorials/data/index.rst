@@ -1,10 +1,12 @@
+.. _DataTag:
+
 Data
 ****
 
-
 .. toctree::
 
-    toy_graphs
+    load_data
+    load_collection
     models
-    load
+    toy_graphs
     save

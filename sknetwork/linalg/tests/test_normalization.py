@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on April 2020
-@author: Nathan de Lara <ndelara@enst.fr>
+@author: Nathan de Lara <nathan.delara@polytechnique.org>
 """
 
 import unittest
@@ -10,7 +10,7 @@ import unittest
 import numpy as np
 from scipy import sparse
 
-from sknetwork.linalg import normalize, CoNeighborOperator
+from sknetwork.linalg import normalize, CoNeighbor
 
 
 class TestNormalization(unittest.TestCase):
@@ -19,7 +19,7 @@ class TestNormalization(unittest.TestCase):
         n = 5
         mat1 = normalize(np.eye(n))
         mat2 = normalize(sparse.eye(n))
-        mat3 = normalize(CoNeighborOperator(mat2))
+        mat3 = normalize(CoNeighbor(mat2))
 
         x = np.random.randn(n)
         self.assertAlmostEqual(np.linalg.norm(mat1.dot(x) - x), 0)

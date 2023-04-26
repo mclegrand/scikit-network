@@ -16,19 +16,11 @@ Paris
 -----
 .. autoclass:: sknetwork.hierarchy.Paris
 
-.. autoclass:: sknetwork.hierarchy.BiParis
-
 Louvain
 -------
 .. autoclass:: sknetwork.hierarchy.LouvainHierarchy
 
-.. autoclass:: sknetwork.hierarchy.BiLouvainHierarchy
-
-Ward
-----
-.. autoclass:: sknetwork.hierarchy.Ward
-
-.. autoclass:: sknetwork.hierarchy.BiWard
+.. autoclass:: sknetwork.hierarchy.LouvainIteration
 
 Metrics
 -------
@@ -44,3 +36,8 @@ Cuts
 
 .. autofunction:: sknetwork.hierarchy.cut_balanced
 
+Dendrograms
+-----------
+.. autofunction:: sknetwork.hierarchy.aggregate_dendrogram
+
+.. autofunction:: sknetwork.hierarchy.reorder_dendrogram

@@ -3,22 +3,21 @@
 """Tests for KNN"""
 import unittest
 
-import numpy as np
+from sknetwork.classification import NNClassifier
+from sknetwork.data.test_graphs import *
+from sknetwork.embedding import Spectral
 
-from sknetwork.classification import KNN
-from sknetwork.data import karate_club
 
+class TestKNNClassifier(unittest.TestCase):
 
-class TestDiffusionClassifier(unittest.TestCase):
+    def test_classification(self):
+        for adjacency in [test_graph(), test_digraph(), test_bigraph()]:
+            labels = {0: 0, 1: 1}
 
-    def test_parallel(self):
-        adjacency = karate_club(metadata=False)
-        seeds = {0: 0, 1: 1}
+            algo = NNClassifier(n_neighbors=1)
+            labels_pred = algo.fit_predict(adjacency, labels)
+            self.assertTrue(len(set(labels_pred)) == 2)
 
-        clf1 = KNN(n_neighbors=1, n_jobs=None)
-        clf2 = KNN(n_neighbors=1, n_jobs=-1)
-
-        labels1 = clf1.fit_transform(adjacency, seeds)
-        labels2 = clf2.fit_transform(adjacency, seeds)
-
-        self.assertTrue(np.allclose(labels1, labels2))
+            algo = NNClassifier(n_neighbors=1, embedding_method=Spectral(2), normalize=False)
+            labels_pred = algo.fit_predict(adjacency, labels)
+            self.assertTrue(len(set(labels_pred)) == 2)

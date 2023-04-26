@@ -10,19 +10,21 @@ from sknetwork.ranking import *
 class TestPageRank(unittest.TestCase):
 
     def test_basic(self):
-        methods = [PageRank(), Diffusion(), Closeness(), HITS(), Harmonic(), Katz(), Dirichlet()]
+        methods = [PageRank(), Closeness(), HITS(), Harmonic(), Katz()]
         for adjacency in [test_graph(), test_digraph()]:
             n = adjacency.shape[0]
             for method in methods:
-                score = method.fit_transform(adjacency)
+                score = method.fit_predict(adjacency)
                 self.assertEqual(score.shape, (n, ))
-                self.assertTrue(score.min() >= 0)
+                self.assertTrue(min(score) >= 0)
+                score = method.fit_transform(adjacency)
+                self.assertEqual(score.shape, (n,))
 
     def test_bipartite(self):
         biadjacency = test_bigraph()
         n_row, n_col = biadjacency.shape
 
-        methods = [BiPageRank(), BiDiffusion(), HITS(), BiKatz(), BiDirichlet()]
+        methods = [PageRank(), HITS(), Katz()]
         for method in methods:
             method.fit(biadjacency)
             scores_row = method.scores_row_

@@ -2,6 +2,104 @@
 History
 =======
 
+0.30.0 (2023-04-12)
+-------------------
+
+* Add overview
+* Add predict_proba method to classification and clustering
+
+0.29.0 (2023-03-30)
+-------------------
+
+* Change API for clustering (predict / transform)
+* Change API for classification (seeds -> labels)
+* Change API for ranking (seeds -> weights)
+* Change API for GNN (same as classifiers)
+* Remove first order methods for link prediction
+* Add nearest neighbor methods for link prediction
+* Add KNN classifier without embedding
+* Add TF-IDF
+* Solve security issues by upgrade of wheels and ipython
+
+0.28.3 (2023-01-06)
+-------------------
+
+* Drop Python 3.7
+* Update Numpy requirement
+
+0.28.2 (2022-11-30)
+-------------------
+
+* Allow Python 3.7, by Thomas Bonald
+* Fix input format for KMeans, issue #548 raised by @sgerbe
+
+0.28.1 (2022-11-22)
+-------------------
+
+* Fix sampling for GraphSage, by Simon Delarue
+* Fix leakage on GNNs, by Thomas Bonald and Simon Delarue
+* Update tutorial on GNNs with node inference, by Thomas Bonald and Simon Delarue
+
+0.28.0 (2022-11-16)
+-------------------
+
+* Update Graph neural networks (e.g., add GraphSAGE), by Simon Delarue
+* Clean data home folder (set one folder per dataset collection, NetSet, Konect, ...), by Thomas Bonald
+* Improve classification by diffusion, setting -1 to unreached nodes, by Thomas Bonald
+* Fix bug on modularity, raised by Alessandro (#543)
+* Clean up source distribution, by Nicholas Bollweg (#544)
+* Safe file extraction, by TrellixVulnTeam
+* Fix bug on dendrogram cut, raised by Nina Sachdev (#546)
+* Add a function to aggregate a graph per label, by Thomas Bonald
+
+0.27.1 (2022-07-29)
+-------------------
+
+* Fix documentation
+
+0.27.0 (2022-07-29)
+-------------------
+
+* Drop Python 3.7
+* Update NumPy and SciPy requirements
+* Add graph neural networks, by Simon Delarue (#533)
+* Add fit_predict / fit_transform where appropriate, by Thomas Bonald
+* Add Louvain hierarchical clustering (bottom-up), by Thomas Bonald
+* Improve classification by diffusion (vectorial), by Thomas Bonald
+* Add F1 scores for classification, by Thomas Bonald
+* Add cosine similarity metric for embeddings, by Thomas Bonald
+* Add acyclic test for undirected graphs, by Thomas Bonald
+* Update algorithms to accept all sparse matrix formats of scipy, by Thomas Bonald
+
+0.26.0 (2022-05-03)
+-------------------
+
+* Add module on regression, by Thomas Bonald
+* Add connected components for bipartite graphs, by Thomas Bonald
+* Update functions for loading graphs, by Thomas Bonald
+* Fix shuffling nodes in Louvain (issue #521), by Thomas Bonald
+* Add radius and eccentricity metrics, by Henry Carscadden (#522)
+* Add new use case (recommendation), by Thomas Bonald
+
+0.25.0 (2022-03-15)
+-------------------
+
+* Add use cases as notebooks, by Thomas Bonald
+* Add list/dict of neighbors for building graphs, by Thomas Bonald
+* Update Spectral embedding, by Thomas Bonald
+* Update Block models, by Thomas Bonald (#507)
+* Fix Tree sampling divergence, by Thomas Bonald (#505)
+* Allow parsers to return weighted graphs, by Thomas Bonald
+* Add Apple Silicon and Python 3.10 wheels, by Quentin Lutz (#503)
+
+0.24.0 (2021-07-27)
+-------------------
+
+* Merge Bi* algorithms (e.g., BiLouvain -> Louvain) by Thomas Bonald (#490)
+* Transition from Travis to Github actions by Quentin Lutz (#488)
+* Added sdist build for conda recipes
+* Added name position for graph visualization
+* Removed randomized algorithms
 
 0.23.1 (2021-04-24)
 -------------------

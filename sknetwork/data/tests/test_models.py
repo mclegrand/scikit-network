@@ -20,7 +20,14 @@ class TestModels(unittest.TestCase):
             if hasattr(graph, 'position'):
                 self.assertEqual(graph.position.shape, (n, 2))
 
+        adjacency = star(n)
+        self.assertEqual(adjacency.shape, (n+1, n+1))
+        graph = star(n, metadata=True)
+        self.assertTrue(hasattr(graph, 'position'))
+
         adjacency = erdos_renyi(n)
+        self.assertEqual(adjacency.shape, (n, n))
+        adjacency = erdos_renyi(n, directed=True, self_loops=True, seed=4)
         self.assertEqual(adjacency.shape, (n, n))
 
         adjacency = albert_barabasi(n, 2)
@@ -35,9 +42,11 @@ class TestModels(unittest.TestCase):
         if hasattr(graph, 'position'):
             self.assertEqual(graph.position.shape, (n, 2))
 
-    def test_SBM(self):
+    def test_block_model(self):
         graph = block_model(np.array([4, 5, 6]), np.array([0.5, 0.3, 0.2]), 0.1, metadata=True)
         adjacency = graph.adjacency
         labels = graph.labels
         self.assertEqual(adjacency.shape, (15, 15))
         self.assertEqual(len(labels), 15)
+        adjacency = block_model(np.array([4, 5, 6]), np.array([0.5, 0.3, 0.2]), 0.1, directed=True, self_loops=True)
+        self.assertEqual(adjacency.shape, (15, 15))

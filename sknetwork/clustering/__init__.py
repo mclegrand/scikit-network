@@ -1,7 +1,6 @@
 """clustering module"""
-from sknetwork.clustering.base import BaseClustering, BaseBiClustering
-from sknetwork.clustering.kmeans import BiKMeans, KMeans
-from sknetwork.clustering.louvain import BiLouvain, Louvain
-from sknetwork.clustering.metrics import modularity, bimodularity, comodularity, normalized_std
-from sknetwork.clustering.postprocess import reindex_labels
-from sknetwork.clustering.propagation_clustering import BiPropagationClustering, PropagationClustering
+from sknetwork.clustering.base import BaseClustering
+from sknetwork.clustering.louvain import Louvain
+from sknetwork.clustering.metrics import get_modularity
+from sknetwork.clustering.postprocess import reindex_labels, aggregate_graph
+from sknetwork.clustering.propagation_clustering import PropagationClustering

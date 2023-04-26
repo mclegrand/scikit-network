@@ -1,10 +1,9 @@
-"""linalg module"""
-from sknetwork.linalg.auto_mode import auto_solver
-from sknetwork.linalg.eig_solver import EigSolver, LanczosEig, HalkoEig
-from sknetwork.linalg.normalization import diag_pinv, normalize
-from sknetwork.linalg.operators import RegularizedAdjacency, LaplacianOperator, NormalizedAdjacencyOperator, \
-    CoNeighborOperator
+"""Module of linear algebra."""
+from sknetwork.linalg.basics import safe_sparse_dot
+from sknetwork.linalg.eig_solver import EigSolver, LanczosEig
+from sknetwork.linalg.laplacian import get_laplacian
+from sknetwork.linalg.normalization import diagonal_pseudo_inverse, get_norms, normalize
+from sknetwork.linalg.operators import Regularizer, Laplacian, Normalizer, CoNeighbor
 from sknetwork.linalg.polynome import Polynome
-from sknetwork.linalg.randomized_methods import safe_sparse_dot, randomized_eig, randomized_svd
 from sknetwork.linalg.sparse_lowrank import SparseLR
-from sknetwork.linalg.svd_solver import SVDSolver, LanczosSVD, HalkoSVD
+from sknetwork.linalg.svd_solver import SVDSolver, LanczosSVD
